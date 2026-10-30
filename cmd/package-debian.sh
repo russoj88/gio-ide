@@ -2,7 +2,7 @@
 # Build a Debian .deb and a standalone Linux binary. Invoke from anywhere:
 #   ./cmd/package-debian.sh 0.1.0
 #   ./cmd/package-debian.sh 0.1.0 dist
-# CI on main passes 0.0.0+<6-char-sha> as the version.
+# CI on main passes 0.0.0. The GitHub Release tag stays v0.0.0.
 set -euo pipefail
 
 root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"

@@ -63,7 +63,7 @@ gio-ide does not shell out to `git`. Git status and commits use go-git. Debuggin
 
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`) runs format, tidy, `go test -race`, vet, and build. Tests skip `internal/gopls` and `internal/thirdparty`. A push to `main` also publishes the `.deb` on a GitHub Release. The Debian version on that release is `0.0.0+<first-6-of-sha>`.
+GitHub Actions (`.github/workflows/ci.yml`) runs format, tidy, `go test -race`, vet, and build. Tests skip `internal/gopls` and `internal/thirdparty`. A push to `main` publishes the `.deb` on the GitHub Release `v0.0.0`. The Debian version is `0.0.0`. Each push replaces that release. This tag stays until the project uses real versions.
 
 ## Release check
 

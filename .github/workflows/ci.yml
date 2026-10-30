@@ -93,14 +93,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="$(printf '%.6s' "${GITHUB_SHA}")"
-          ./cmd/package-debian.sh "0.0.0+${tag}" dist
+          # One standing release until the project uses real versions.
+          # dpkg requires a leading digit, so the package version has no "v".
+          tag="v0.0.0"
+          ver="0.0.0"
+          ./cmd/package-debian.sh "${ver}" dist
           assets=(dist/*.deb dist/*_linux_* dist/SHA256SUMS)
-          if gh release view "${tag}" >/dev/null 2>&1; then
-            gh release upload "${tag}" "${assets[@]}" --clobber
-          else
-            gh release create "${tag}" "${assets[@]}" \
-              --target "${GITHUB_SHA}" \
-              --title "${tag}" \
-              --notes "Debian package and Linux binary for ${GITHUB_SHA}."
-          fi
+          notes="Debian package and Linux binary for ${GITHUB_SHA}."
+          # Replace the release so the tag points at this commit.
+          gh release delete "${tag}" --yes --cleanup-tag || true
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" || true
+          gh release create "${tag}" "${assets[@]}" \
+            --target "${GITHUB_SHA}" \
+            --latest \
+            --title "${tag}" \
+            --notes "${notes}"
