@@ -1,0 +1,14 @@
+diff --git a/internal/gopls/filecache/filecache.go b/internal/gopls/filecache/filecache.go
+--- a/internal/gopls/filecache/filecache.go
++++ b/internal/gopls/filecache/filecache.go
+@@ -142,7 +142,9 @@
+ 		return val, true // hit
+ 	}
+ 	if errNoCache, ok := errors.AsType[ErrNoCache](err); ok {
+-		log.Fatal(errNoCache) // unrecoverable
++		// gio-ide P2: a cache fault must not end the editor.
++		bug.Reportf("filecache: %v", errNoCache)
++		return *new(T), false
+ 	}
+ 	if err != ErrNotFound {
+ 		log.Printf("unexpected error reading %s from filecache: %v", kind, err)

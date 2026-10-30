@@ -1,0 +1,11 @@
+0:0:7:syntax.keyword
+2:0:6:syntax.keyword
+2:7:12:syntax.string
+4:0:21:syntax.comment
+5:0:4:syntax.keyword
+5:5:10:syntax.function
+5:16:22:syntax.type
+5:24:30:syntax.type
+6:1:7:syntax.keyword
+6:12:19:syntax.function
+6:20:27:syntax.string

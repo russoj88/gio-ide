@@ -1,0 +1,32 @@
+/bin/
+/dist/
+/gio-ide
+/THIRD_PARTY_LICENSES
+/packaging/*.png
+
+# Local editor and project state
+.gio-ide/
+.idea/
+.vscode/
+.DS_Store
+*~
+*.swp
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+*.p12
+id_rsa
+id_ed25519
+
+# Go build outputs
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+*.log

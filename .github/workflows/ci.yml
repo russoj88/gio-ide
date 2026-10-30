@@ -1,0 +1,106 @@
+# Linux CI. A push to main also publishes the .deb.
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CGO_ENABLED: "1"
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.2"
+
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc pkg-config \
+            libwayland-dev libx11-dev libx11-xcb-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libgles2-mesa-dev libegl1-mesa-dev \
+            libffi-dev libxcursor-dev libvulkan-dev \
+            jq python3
+
+      - name: Install gofumpt
+        run: go install mvdan.cc/gofumpt@v0.12.0
+
+      - name: Format
+        run: |
+          set -euo pipefail
+          files="$(gofumpt -l .)"
+          bad=()
+          while IFS= read -r f; do
+            [ -n "${f}" ] || continue
+            case "${f}" in
+              internal/gopls|internal/gopls/*|internal/thirdparty|internal/thirdparty/*) continue ;;
+            esac
+            bad+=("${f}")
+          done <<< "${files}"
+          if [ "${#bad[@]}" -gt 0 ]; then
+            printf '%s\n' "${bad[@]}"
+            gofumpt -d "${bad[@]}"
+            exit 1
+          fi
+
+      - name: Tidy
+        run: |
+          set -euo pipefail
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Test
+        run: |
+          set -euo pipefail
+          list="$(go list ./...)"
+          pkgs=()
+          while IFS= read -r p; do
+            [ -n "${p}" ] || continue
+            case "${p}" in
+              */internal/gopls|*/internal/gopls/*|*/internal/thirdparty|*/internal/thirdparty/*) continue ;;
+            esac
+            pkgs+=("${p}")
+          done <<< "${list}"
+          go test -race "${pkgs[@]}"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$(printf '%.6s' "${GITHUB_SHA}")"
+          ./cmd/package-debian.sh "0.0.0+${tag}" dist
+          assets=(dist/*.deb dist/*_linux_* dist/SHA256SUMS)
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            gh release upload "${tag}" "${assets[@]}" --clobber
+          else
+            gh release create "${tag}" "${assets[@]}" \
+              --target "${GITHUB_SHA}" \
+              --title "${tag}" \
+              --notes "Debian package and Linux binary for ${GITHUB_SHA}."
+          fi

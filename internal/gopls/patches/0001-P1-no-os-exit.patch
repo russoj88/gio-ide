@@ -1,0 +1,22 @@
+diff --git a/internal/gopls/server/general.go b/internal/gopls/server/general.go
+--- a/internal/gopls/server/general.go
++++ b/internal/gopls/server/general.go
+@@ -13,7 +13,6 @@
+ 	"errors"
+ 	"fmt"
+ 	"go/build"
+-	"os"
+ 	"path"
+ 	"path/filepath"
+ 	"slices"
+@@ -803,8 +802,8 @@
+ 	s.client.Close() // ignore error
+ 
+ 	if s.state != serverShutDown {
+-		// TODO: We should be able to do better than this.
+-		os.Exit(1)
++		// gio-ide P1: never end the editor process.
++		return fmt.Errorf("exit called before shutdown")
+ 	}
+ 	// We don't terminate the process on a normal exit, we just allow it to
+ 	// close naturally if needed after the connection is closed.

@@ -1,0 +1,146 @@
+diff --git a/internal/gopls/golang/splitpkg/splitpkg.go b/internal/gopls/golang/splitpkg/splitpkg.go
+--- a/internal/gopls/golang/splitpkg/splitpkg.go
++++ b/internal/gopls/golang/splitpkg/splitpkg.go
+@@ -58,7 +58,6 @@
+ 	"go/token"
+ 	"go/types"
+ 	"html/template"
+-	"log"
+ 	"strconv"
+ 	"strings"
+ 
+@@ -80,7 +79,7 @@
+ func HTML(pkgpath metadata.PackagePath) []byte {
+ 	t, err := template.New("splitpkg.html").Parse(htmlTmpl)
+ 	if err != nil {
+-		log.Fatal(err)
++		panic(err)
+ 	}
+ 	data := struct {
+ 		Title string
+@@ -89,7 +88,7 @@
+ 	}
+ 	var buf bytes.Buffer
+ 	if err := t.Execute(&buf, data); err != nil {
+-		log.Fatal(err)
++		panic(err)
+ 	}
+ 	return buf.Bytes()
+ }
+diff --git a/internal/gopls/server/command.go b/internal/gopls/server/command.go
+--- a/internal/gopls/server/command.go
++++ b/internal/gopls/server/command.go
+@@ -12,7 +12,6 @@
+ 	"errors"
+ 	"fmt"
+ 	"io"
+-	"log"
+ 	"maps"
+ 	"os"
+ 	"path/filepath"
+@@ -442,7 +441,7 @@
+ 	// gopls.vulncheck command.
+ 	if c.params.Command == "gopls.run_govulncheck" {
+ 		if cfg.progress == "" {
+-			log.Fatalf("asynchronous command gopls.run_govulncheck does not enable progress reporting")
++			panic(fmt.Sprintf("asynchronous command gopls.run_govulncheck does not enable progress reporting"))
+ 		}
+ 		guard.Go(func() { func() {
+ 			if err := runcmd(); err != nil {
+diff --git a/internal/gopls/xtools/analysis/driverutil/fix.go b/internal/gopls/xtools/analysis/driverutil/fix.go
+--- a/internal/gopls/xtools/analysis/driverutil/fix.go
++++ b/internal/gopls/xtools/analysis/driverutil/fix.go
+@@ -251,7 +251,7 @@
+ 		baseline := baselineContent[file] // (cache hit)
+ 		final, err := diff.ApplyBytes(baseline, edits)
+ 		if err != nil {
+-			log.Fatalf("internal error in diff.ApplyBytes: %v", err)
++			panic(fmt.Sprintf("internal error in diff.ApplyBytes: %v", err))
+ 		}
+ 
+ 		// Attempt to format each file.
+diff --git a/internal/gopls/xtools/diff/lcs/common.go b/internal/gopls/xtools/diff/lcs/common.go
+--- a/internal/gopls/xtools/diff/lcs/common.go
++++ b/internal/gopls/xtools/diff/lcs/common.go
+@@ -5,7 +5,7 @@
+ package lcs
+ 
+ import (
+-	"log"
++	"fmt"
+ 	"sort"
+ )
+ 
+@@ -73,7 +73,7 @@
+ 	}
+ 	tmp.sort()
+ 	if false && !tmp.valid() { // debug checking
+-		log.Fatalf("here %d", len(tmp))
++		panic(fmt.Sprintf("here %d", len(tmp)))
+ 	}
+ 	return tmp
+ }
+diff --git a/internal/gopls/xtools/diff/unified.go b/internal/gopls/xtools/diff/unified.go
+--- a/internal/gopls/xtools/diff/unified.go
++++ b/internal/gopls/xtools/diff/unified.go
+@@ -6,7 +6,6 @@
+ 
+ import (
+ 	"fmt"
+-	"log"
+ 	"regexp"
+ 	"strconv"
+ 	"strings"
+@@ -24,7 +23,7 @@
+ 	unified, err := ToUnified(oldLabel, newLabel, old, edits, DefaultContextLines)
+ 	if err != nil {
+ 		// Can't happen: edits are consistent.
+-		log.Fatalf("internal error in diff.Unified: %v", err)
++		panic(fmt.Sprintf("internal error in diff.Unified: %v", err))
+ 	}
+ 	return unified
+ }
+diff --git a/internal/gopls/xtools/gocommand/invoke.go b/internal/gopls/xtools/gocommand/invoke.go
+--- a/internal/gopls/xtools/gocommand/invoke.go
++++ b/internal/gopls/xtools/gocommand/invoke.go
+@@ -472,7 +472,7 @@
+ 			log.Printf("Sending signal %d to hanging go command: %v", sigStuckProcess, err)
+ 		}
+ 	}
+-	log.Fatalf("detected hanging go command (golang/go#54461); waited %s\n\tcommand:%s\n\tpid:%d", time.Since(start), cmd, cmd.Process.Pid)
++	panic(fmt.Sprintf("detected hanging go command (golang/go#54461); waited %s\n\tcommand:%s\n\tpid:%d", time.Since(start), cmd, cmd.Process.Pid))
+ }
+ 
+ func cmdDebugStr(cmd *exec.Cmd) string {
+diff --git a/internal/gopls/xtools/pkgbits/decoder.go b/internal/gopls/xtools/pkgbits/decoder.go
+--- a/internal/gopls/xtools/pkgbits/decoder.go
++++ b/internal/gopls/xtools/pkgbits/decoder.go
+@@ -12,7 +12,6 @@
+ 	"go/token"
+ 	"io"
+ 	"math/big"
+-	"os"
+ 	"runtime"
+ 	"strings"
+ )
+@@ -354,7 +353,7 @@
+ 	// We already printed a stack trace for the reader, so now we can
+ 	// simply exit. Printing a second one with panic or base.Fatalf
+ 	// would just be noise.
+-	os.Exit(1)
++	panic("process exit removed")
+ }
+ 
+ // Bool decodes and returns a bool value from the element bitstream.
+diff --git a/internal/gopls/xtools/testenv/testenv.go b/internal/gopls/xtools/testenv/testenv.go
+--- a/internal/gopls/xtools/testenv/testenv.go
++++ b/internal/gopls/xtools/testenv/testenv.go
+@@ -327,7 +327,7 @@
+ 			return
+ 		}
+ 	}
+-	os.Exit(0)
++	panic("process exit removed")
+ }
+ 
+ // Go1Point returns the x in Go 1.x.

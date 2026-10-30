@@ -1,0 +1,25 @@
+diff --git a/internal/gopls/settings/analysis.go b/internal/gopls/settings/analysis.go
+index 271af08..15dbfeb 100644
+--- a/internal/gopls/settings/analysis.go
++++ b/internal/gopls/settings/analysis.go
+@@ -14,10 +14,8 @@ import (
+ 	"golang.org/x/tools/go/analysis/passes/inline"
+ 	"golang.org/x/tools/go/analysis/passes/modernize"
+ 	"golang.org/x/tools/go/analysis/passes/nilness"
+-	"golang.org/x/tools/go/analysis/passes/scannererr"
+ 	"golang.org/x/tools/go/analysis/passes/shadow"
+ 	"golang.org/x/tools/go/analysis/passes/sortslice"
+-	"golang.org/x/tools/go/analysis/passes/sqlrowserr"
+ 	"golang.org/x/tools/go/analysis/passes/unusedwrite"
+ 	"golang.org/x/tools/go/analysis/suite/fix"
+ 	"golang.org/x/tools/go/analysis/suite/vet"
+@@ -170,8 +168,7 @@ func initAnalyzers() (res []*Analyzer) {
+ 		{analyzer: yield.Analyzer},   // uses go/ssa
+ 		{analyzer: sortslice.Analyzer},
+ 		{analyzer: embeddirective.Analyzer},
+-		{analyzer: scannererr.Analyzer},         // to appear in cmd/vet@go1.28
+-		{analyzer: sqlrowserr.Analyzer},         // to appear in cmd/vet@go1.28
++		// scannererr and sqlrowserr are in vet.Suite as of golang.org/x/tools v0.49.
+ 		{analyzer: recursiveiter.Analyzer},      // under evaluation
+ 		{analyzer: errorsastypeshadow.Analyzer}, // under evaluation
+ 		{analyzer: writestring.Analyzer},        // under evaluation

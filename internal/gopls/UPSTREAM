@@ -1,0 +1,4 @@
+tag=gopls/v0.23.0
+commit=014f87ff5c01915bc90f4f11a6bb8aea3e0edbd7
+xtools=v0.47.1-0.20260707181000-a299dadba899
+module_floor=golang.org/x/tools@v0.49.0
