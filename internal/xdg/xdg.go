@@ -19,7 +19,6 @@ func StatePath(parts ...string) string  { return join(StateDir(), parts...) }
 
 func SettingsPath() string { return ConfigPath("settings.toml") }
 func KeymapPath() string   { return ConfigPath("keymap.toml") }
-func ThemesDir() string    { return ConfigPath("themes") }
 func RecentPath() string   { return StatePath("recent.toml") }
 func LogDir() string       { return StatePath("logs") }
 func LogPath() string      { return StatePath("logs", "gio-ide.log") }

@@ -38,11 +38,6 @@ func (v *View) SetMarks(marks []Mark) {
 	v.marks = append([]Mark(nil), marks...)
 }
 
-// Marks returns a copy of the marks on this view.
-func (v *View) Marks() []Mark {
-	return append([]Mark(nil), v.marks...)
-}
-
 // ToggleMark adds m. The same start, end, and kind removes that mark.
 // The same start and end with a different kind replaces the kind.
 // End < Start is ignored. A point mark (Start == End) is kept.

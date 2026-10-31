@@ -606,12 +606,8 @@ func (s *shell) layoutPopupBody(gtx layout.Context) layout.Dimensions {
 				return s.layoutPopupRows(gtx)
 			}
 			if s.popup != "action" {
-				msg := "This action is not in this version."
-				if s.popup == "commit" {
-					msg = "Git actions appear after a repository is open."
-				}
 				return ui.Inset(gtx, unit.Dp(10), 0, 0, 0, func(gtx layout.Context) layout.Dimensions {
-					return ui.Text(gtx, s.shaper, ui.Font, unit.Sp(13), th.Color("ui.dim"), msg)
+					return ui.Text(gtx, s.shaper, ui.Font, unit.Sp(13), th.Color("ui.dim"), "This action is not in this version.")
 				})
 			}
 			items := s.filteredCommands()

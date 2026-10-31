@@ -39,6 +39,7 @@ type Branch struct {
 }
 
 // Repo is a worktree opened with DetectDotGit.
+// mu is held for the whole go-git call. The pack index map has no lock of its own.
 type Repo struct {
 	mu     sync.Mutex
 	repo   *gogit.Repository
@@ -76,6 +77,8 @@ func (r *Repo) Status(ctx context.Context) (Status, error) {
 	if err := ctx.Err(); err != nil {
 		return Status{}, err
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	wt, err := r.repo.Worktree()
 	if err != nil {
 		return Status{}, err
@@ -99,11 +102,9 @@ func (r *Repo) Status(ctx context.Context) (Status, error) {
 	out := Status{Branch: head, Files: files}
 	notice := commitNotice(r.repo, r.root)
 	branches, _ := r.readBranches(head)
-	r.mu.Lock()
 	r.status = out
 	r.notice = notice
 	r.branch = branches
-	r.mu.Unlock()
 	return out, nil
 }
 
@@ -121,6 +122,8 @@ func (r *Repo) IndexText(ctx context.Context, path string) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	rel, err := r.rel(path)
 	if err != nil {
 		return nil, err
@@ -150,6 +153,8 @@ func (r *Repo) Stage(ctx context.Context, paths []string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	wt, err := r.repo.Worktree()
 	if err != nil {
 		return err
@@ -172,6 +177,8 @@ func (r *Repo) Commit(ctx context.Context, message string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	msg := strings.TrimSpace(message)
 	if msg == "" {
 		return errors.New("commit message is empty")
@@ -189,6 +196,8 @@ func (r *Repo) Branches(ctx context.Context) ([]Branch, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	head := ""
 	if ref, err := r.repo.Head(); err == nil {
 		head = ref.Name().Short()
@@ -197,9 +206,7 @@ func (r *Repo) Branches(ctx context.Context) ([]Branch, error) {
 	if err != nil {
 		return nil, err
 	}
-	r.mu.Lock()
 	r.branch = list
-	r.mu.Unlock()
 	return list, nil
 }
 
@@ -209,6 +216,8 @@ func (r *Repo) Switch(ctx context.Context, name string, create bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return errors.New("branch name is empty")
@@ -316,6 +325,8 @@ func executableHooks(dir string) bool {
 
 // HeadCommit returns the current commit message.
 func HeadCommit(r *Repo) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	ref, err := r.repo.Head()
 	if err != nil {
 		return "", err

@@ -66,14 +66,6 @@ func (d *Desktop) Resize(size image.Point) {
 	d.size = size
 }
 
-// SetScale sets pixels per dp and pixels per sp for the next Step.
-func (d *Desktop) SetScale(pxPerDp, pxPerSp float32) {
-	if pxPerDp <= 0 || pxPerSp <= 0 {
-		panic("harness: scale must be positive")
-	}
-	d.metric = unit.Metric{PxPerDp: pxPerDp, PxPerSp: pxPerSp}
-}
-
 // SetNow sets the clock read by the next frame.
 func (d *Desktop) SetNow(t time.Time) {
 	d.now = t

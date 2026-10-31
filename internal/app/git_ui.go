@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/russoj88/gio-ide/internal/bus"
@@ -112,7 +113,11 @@ func (s *shell) runGutter(id uint64) {
 	if err != nil {
 		return
 	}
-	marks := git.DiffMarks(string(idx), string(doc.Snapshot().Bytes()))
+	indexText := string(idx)
+	if doc.CRLF() {
+		indexText = strings.ReplaceAll(indexText, "\r\n", "\n")
+	}
+	marks := git.DiffMarks(indexText, string(doc.Snapshot().Bytes()))
 	lines := make([]bus.GutterMark, len(marks))
 	for i, m := range marks {
 		lines[i] = bus.GutterMark{Line: m.Line, Kind: m.Kind}
@@ -245,18 +250,20 @@ func (s *shell) runGitDiff(path string, seq uint64) {
 	}
 	var live []byte
 	liveOK := false
+	liveCRLF := false
 	s.docsMu.Lock()
 	for _, doc := range s.docs {
 		if doc != nil && sameGitPath(repo.Root(), doc.Path(), path) {
 			live = append([]byte(nil), doc.Snapshot().Bytes()...)
 			liveOK = true
+			liveCRLF = doc.CRLF()
 			break
 		}
 	}
 	s.docsMu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	d, err := repo.DiffAgainstHead(ctx, path, live, liveOK)
+	d, err := repo.DiffAgainstHead(ctx, path, live, liveOK, liveCRLF)
 	if err != nil {
 		s.bus.Post(bus.GitDiffUpdated{Seq: seq, Path: path, Note: err.Error()})
 		return

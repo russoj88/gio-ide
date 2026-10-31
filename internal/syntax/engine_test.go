@@ -66,7 +66,9 @@ func TestHighlightGolden(t *testing.T) {
 	})
 	doc := buffer.FromBytes("fixture.go", text)
 	eng.Open(doc.ID(), "go", doc.Snapshot())
-	eng.RequestSpans(doc.ID(), doc.Version(), 0, doc.Snapshot().LineCount())
+	if !eng.RequestSpans(doc.ID(), doc.Version(), 0, doc.Snapshot().LineCount()) {
+		t.Fatal("span request was dropped")
+	}
 	eng.Flush()
 	eng.Close(doc.ID())
 	eng.Shutdown()
@@ -94,8 +96,12 @@ func TestLiveObjectsZero(t *testing.T) {
 	eng := New(nil)
 	doc := buffer.FromBytes("fixture.go", text)
 	eng.Open(doc.ID(), "go", doc.Snapshot())
-	eng.RequestSpans(doc.ID(), 1, 0, 20)
-	eng.RequestBracket(doc.ID(), 1, 0)
+	if !eng.RequestSpans(doc.ID(), 1, 0, 20) {
+		t.Fatal("span request was dropped")
+	}
+	if !eng.RequestBracket(doc.ID(), 1, 0) {
+		t.Fatal("bracket request was dropped")
+	}
 	eng.Flush()
 	eng.Close(doc.ID())
 	eng.Flush()

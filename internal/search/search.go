@@ -44,25 +44,9 @@ func (Builtin) Search(ctx context.Context, root string, files []string, q Query,
 	if q.Pattern == "" {
 		return nil
 	}
-	var re *regexp.Regexp
-	// Case-insensitive literals use the regexp so match indexes stay
-	// byte offsets in the original line. strings.ToLower can change length.
-	if q.Regex || q.WholeWord || !q.CaseSensitive {
-		pat := q.Pattern
-		if !q.Regex {
-			pat = regexp.QuoteMeta(pat)
-		}
-		if q.WholeWord {
-			pat = `\b` + pat + `\b`
-		}
-		if !q.CaseSensitive {
-			pat = "(?i)" + pat
-		}
-		compiled, err := regexp.Compile(pat)
-		if err != nil {
-			return err
-		}
-		re = compiled
+	re, err := compileQuery(q)
+	if err != nil {
+		return err
 	}
 	workers := max(runtime.NumCPU(), 1)
 	jobs := make(chan string)
@@ -126,6 +110,67 @@ func (Builtin) Search(ctx context.Context, root string, files []string, q Query,
 		flush(true)
 	}
 	return nil
+}
+
+// compileQuery builds the matcher Search and Replace share.
+// A nil regexp means a case-sensitive literal. An empty pattern returns nil, nil.
+func compileQuery(q Query) (*regexp.Regexp, error) {
+	if q.Pattern == "" || (!q.Regex && !q.WholeWord && q.CaseSensitive) {
+		return nil, nil
+	}
+	pat := q.Pattern
+	if !q.Regex {
+		pat = regexp.QuoteMeta(pat)
+	}
+	if q.WholeWord {
+		pat = `\b` + pat + `\b`
+	}
+	if !q.CaseSensitive {
+		pat = "(?i)" + pat
+	}
+	return regexp.Compile(pat)
+}
+
+// Skipped reports whether rel is outside q.Include or matches q.Exclude.
+func Skipped(rel string, q Query) bool {
+	return skipped(rel, q.Include, q.Exclude)
+}
+
+// Replace applies q to text and returns the new text and the match count.
+// The match rules are the same as Search. A literal pattern inserts repl unchanged.
+// A regex pattern expands $ in repl.
+func Replace(text string, q Query, repl string) (string, int, error) {
+	if q.Pattern == "" {
+		return text, 0, nil
+	}
+	re, err := compileQuery(q)
+	if err != nil {
+		return text, 0, err
+	}
+	if re == nil {
+		n := strings.Count(text, q.Pattern)
+		if n == 0 {
+			return text, 0, nil
+		}
+		return strings.ReplaceAll(text, q.Pattern, repl), n, nil
+	}
+	locs := re.FindAllStringSubmatchIndex(text, -1)
+	if len(locs) == 0 {
+		return text, 0, nil
+	}
+	var b strings.Builder
+	last := 0
+	for _, loc := range locs {
+		b.WriteString(text[last:loc[0]])
+		if q.Regex {
+			b.Write(re.ExpandString(nil, repl, text, loc))
+		} else {
+			b.WriteString(repl)
+		}
+		last = loc[1]
+	}
+	b.WriteString(text[last:])
+	return b.String(), len(locs), nil
 }
 
 func skipped(rel string, include, exclude []string) bool {

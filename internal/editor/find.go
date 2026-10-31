@@ -41,6 +41,8 @@ func (v *View) FindAll(query string, regex bool) ([]Sel, error) {
 }
 
 // FindNext selects the next match after the caret. dir < 0 searches backward.
+// Backward search picks the last match that ends at or before the selection start,
+// so the active match is not chosen again.
 func (v *View) FindNext(query string, regex bool, dir int) error {
 	matches, err := v.FindAll(query, regex)
 	if err != nil || len(matches) == 0 {
@@ -59,8 +61,9 @@ func (v *View) FindNext(query string, regex bool, dir int) error {
 			pick = 0
 		}
 	} else {
-		for i, matche := range slices.Backward(matches) {
-			if int(matche.min()) < at {
+		limit := int(v.primary().min())
+		for i, match := range slices.Backward(matches) {
+			if int(match.max()) <= limit {
 				pick = i
 				break
 			}

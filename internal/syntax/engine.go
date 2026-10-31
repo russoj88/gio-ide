@@ -30,8 +30,11 @@ type Engine interface {
 	Open(docID uint64, lang string, s buffer.Snapshot)
 	Edit(docID uint64, e buffer.Edit, after buffer.Snapshot)
 	Close(docID uint64)
-	RequestSpans(docID uint64, version int32, firstLine, lastLine int)
-	RequestBracket(docID uint64, version int32, at buffer.Offset)
+	// RequestSpans reports whether the worker queued the job.
+	// False means the queue was full and the caller should try again.
+	RequestSpans(docID uint64, version int32, firstLine, lastLine int) bool
+	// RequestBracket reports whether the worker queued the job.
+	RequestBracket(docID uint64, version int32, at buffer.Offset) bool
 	Flush()
 	Shutdown()
 }
@@ -120,17 +123,21 @@ func (e *eng) Close(docID uint64) {
 	e.jobs <- job{kind: kindClose, id: docID}
 }
 
-func (e *eng) RequestSpans(docID uint64, version int32, firstLine, lastLine int) {
+func (e *eng) RequestSpans(docID uint64, version int32, firstLine, lastLine int) bool {
 	select {
 	case e.jobs <- job{kind: kindSpans, id: docID, version: version, first: firstLine, last: lastLine}:
+		return true
 	default:
+		return false
 	}
 }
 
-func (e *eng) RequestBracket(docID uint64, version int32, at buffer.Offset) {
+func (e *eng) RequestBracket(docID uint64, version int32, at buffer.Offset) bool {
 	select {
 	case e.jobs <- job{kind: kindBracket, id: docID, version: version, at: at}:
+		return true
 	default:
+		return false
 	}
 }
 

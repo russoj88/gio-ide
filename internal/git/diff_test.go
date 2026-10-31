@@ -21,7 +21,7 @@ func TestDiffAgainstHead(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("alpha\nBETA\ngamma\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		d, err := repo.DiffAgainstHead(ctx, filepath.Join(dir, "a.txt"), nil, false)
+		d, err := repo.DiffAgainstHead(ctx, filepath.Join(dir, "a.txt"), nil, false, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -63,7 +63,7 @@ func TestDiffAgainstHead(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("fresh\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		d, err := repo.DiffAgainstHead(ctx, "new.txt", nil, false)
+		d, err := repo.DiffAgainstHead(ctx, "new.txt", nil, false, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -85,7 +85,7 @@ func TestDiffAgainstHead(t *testing.T) {
 		if err := os.Remove(filepath.Join(dir, "gone.txt")); err != nil {
 			t.Fatal(err)
 		}
-		d, err := repo.DiffAgainstHead(ctx, "gone.txt", nil, false)
+		d, err := repo.DiffAgainstHead(ctx, "gone.txt", nil, false, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -107,7 +107,7 @@ func TestDiffAgainstHead(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("from-disk\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		d, err := repo.DiffAgainstHead(ctx, "f.txt", []byte("from-buffer\n"), true)
+		d, err := repo.DiffAgainstHead(ctx, "f.txt", []byte("from-buffer\n"), true, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -129,7 +129,7 @@ func TestDiffAgainstHead(t *testing.T) {
 	t.Run("identical", func(t *testing.T) {
 		dir := t.TempDir()
 		repo := seed(t, dir, "f.txt", "same\n")
-		d, err := repo.DiffAgainstHead(ctx, "f.txt", []byte("same\n"), true)
+		d, err := repo.DiffAgainstHead(ctx, "f.txt", []byte("same\n"), true, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -138,10 +138,32 @@ func TestDiffAgainstHead(t *testing.T) {
 		}
 	})
 
+	t.Run("crlf buffer matches head", func(t *testing.T) {
+		dir := t.TempDir()
+		repo := seed(t, dir, "f.txt", "alpha\r\nbeta\r\n")
+		d, err := repo.DiffAgainstHead(ctx, "f.txt", []byte("alpha\nbeta\n"), true, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(d.Rows) != 0 || d.Binary || d.TooBig {
+			t.Fatalf("unchanged crlf %+v", d)
+		}
+		d, err = repo.DiffAgainstHead(ctx, "f.txt", []byte("alpha\nBETA\n"), true, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(d.Rows) != 2 {
+			t.Fatalf("rows %d:\n%s", len(d.Rows), formatRows(d.Rows))
+		}
+		if d.Rows[1].Left.Text != "beta" || d.Rows[1].Right.Text != "BETA" {
+			t.Fatalf("text %q %q", d.Rows[1].Left.Text, d.Rows[1].Right.Text)
+		}
+	})
+
 	t.Run("binary", func(t *testing.T) {
 		dir := t.TempDir()
 		repo := seed(t, dir, "f.txt", "plain\n")
-		d, err := repo.DiffAgainstHead(ctx, "f.txt", []byte{'a', 0, 'b'}, true)
+		d, err := repo.DiffAgainstHead(ctx, "f.txt", []byte{'a', 0, 'b'}, true, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -155,7 +177,7 @@ func TestDiffAgainstHead(t *testing.T) {
 		repo := seed(t, dir, "f.txt", "plain\n")
 		live := make([]byte, 1<<20+1)
 		live[0] = 'x'
-		d, err := repo.DiffAgainstHead(ctx, "f.txt", live, true)
+		d, err := repo.DiffAgainstHead(ctx, "f.txt", live, true, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -167,7 +189,7 @@ func TestDiffAgainstHead(t *testing.T) {
 	t.Run("no trailing newline", func(t *testing.T) {
 		dir := t.TempDir()
 		repo := seed(t, dir, "f.txt", "alpha\n")
-		d, err := repo.DiffAgainstHead(ctx, "f.txt", []byte("alpha\nbeta"), true)
+		d, err := repo.DiffAgainstHead(ctx, "f.txt", []byte("alpha\nbeta"), true, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -189,7 +211,7 @@ func TestDiffAgainstHead(t *testing.T) {
 		repo := seed(t, dir, "f.txt", "same\n")
 		cctx, cancel := context.WithCancel(ctx)
 		cancel()
-		_, err := repo.DiffAgainstHead(cctx, "f.txt", nil, false)
+		_, err := repo.DiffAgainstHead(cctx, "f.txt", nil, false, false)
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("err %v", err)
 		}
@@ -208,7 +230,7 @@ func TestDiffUnbornHead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := repo.DiffAgainstHead(context.Background(), "a.txt", nil, false)
+	d, err := repo.DiffAgainstHead(context.Background(), "a.txt", nil, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +290,7 @@ func diffLive(t *testing.T, oldLines, newLines []string) Diff {
 	old := strings.Join(oldLines, "\n") + "\n"
 	repo := seed(t, dir, "f.txt", old)
 	live := strings.Join(newLines, "\n") + "\n"
-	d, err := repo.DiffAgainstHead(context.Background(), "f.txt", []byte(live), true)
+	d, err := repo.DiffAgainstHead(context.Background(), "f.txt", []byte(live), true, false)
 	if err != nil {
 		t.Fatal(err)
 	}

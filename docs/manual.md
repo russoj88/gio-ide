@@ -60,7 +60,7 @@ Config files:
 | Recent files | `$XDG_STATE_HOME/gio-ide/recent.toml` (50 paths) |
 | Project settings | `<root>/.gio-ide/settings.toml` |
 
-Load order is defaults, then the user file, then the project file. The project file wins. The Settings card writes changed keys to the user file only, then reloads both layers. The app does not write the project file.
+Load order is defaults, then the user file, then the project file. The project file wins for every key except `terminal.shell`, `editor.goimports_on_save`, and `editor.gofix_on_save`. The project file cannot set those three keys. The Settings card writes changed keys to the user file only, then reloads both layers. The app does not write the project file.
 
 Where a message appears:
 
@@ -101,7 +101,7 @@ A non-empty `s.notice` is an extra line under those hints.
 
 There is no tab strip. `layoutLeaf` draws the active buffer only. Several buffers can be open. Alt+Right (`nav.nextTab`) and Alt+Left (`nav.prevTab`) change which one is visible. The status bar does not name the file. Check the active document path.
 
-Popup keys, other than Settings: Escape closes. Backspace, Delete, Left, Right, Home, and End edit the field. Up and Down move the row. Enter accepts. A printable key appends. There is no click-outside dismiss. Palette rows, search hits, git rows, and problem rows are not click targets. Terminal tabs and the terminal + are click targets. The unsaved dialog rows and the Settings controls are click targets.
+Popup keys, other than Settings: Escape closes. Backspace, Delete, Left, Right, Home, and End edit the field. Up and Down move the row. Enter accepts. A printable key appends. There is no click-outside dismiss. Palette rows, search hits, and problem rows are not click targets. A git status row is a click target. Terminal tabs and the terminal + are click targets. The unsaved dialog rows and the Settings controls are click targets.
 
 ## 3. Project tree and opening files
 
@@ -121,7 +121,7 @@ Popup keys, other than Settings: Escape closes. Backspace, Delete, Left, Right, 
 | File click | That file is the active buffer and focus is the editor. |
 | Path already open | That buffer is focused. The file is not loaded again. |
 
-The index skips `files.exclude` (default `node_modules/`) and gitignore patterns. A tracked path is still listed. `files.watch` defaults to true. When inotify hits its limit, the welcome notice is `File watching stopped (fs.inotify.max_user_watches). The tree rescans when the window is focused.`
+The index skips `files.exclude` (default `node_modules/`) and gitignore patterns. A tracked path is still listed. `files.watch` defaults to true. The watcher sends a create, a write, a remove, or a rename to gopls after a short quiet period. It ignores chmod. When inotify hits its limit, the welcome notice is `File watching stopped (fs.inotify.max_user_watches). The tree rescans when the window is focused.`
 
 A NUL in the first 8192 bytes, or bytes that are not valid UTF-8, opens read-only. The editor paints `This file is binary or not valid UTF-8. It is read-only.` Typing does nothing.
 
@@ -254,13 +254,13 @@ One printable key on a Linux window is a key event and an edit event in the same
 
 **See.** A bar above the editor. The query line is `Find  ` plus a caret. The regex button is labeled `.*` and uses `ui.selection` while regex is on. Replace adds a `Replace  ` line and an `All` button. A single-line selection is copied into the query when the bar opens. The popup kinds `find` and `replace` are not opened by these commands. Their body, if a test sets `popup` to one of them, is `This action is not in this version.`
 
-**Pass.** Each search puts the caret back at the position recorded when the bar opened, then selects the next match after that position. A second Enter or F3 selects that same match again. `editor.View.FindNext` on its own walks forward. The bar reset is what the window does.
+**Pass.** A query change or the regex toggle searches again from the caret recorded when the bar opened. Enter, F3, and Shift+F3 keep the current hit and move from there. Find next selects the following match. Find previous selects the match that ends at or before the selection start.
 
 Literal search is case-sensitive. An empty query does nothing. A zero-length regex match is skipped. A bad pattern stores `err.Error()` in `s.notice`. There is no whole-word switch and no case switch. The note mark uses `editor.findMatch`. The hit is the normal selection.
 
-Replace one replaces the primary selection when it matches the query, as one undo step, then selects the next match from the new caret. Replace all reports `<n> replaced` and moves the caret to the end of the buffer. In regex mode, `$1` and the other `Regexp.Expand` tokens expand. `TestFindReplace` calls `View.FindNext` directly, so it walks. A window test that uses the bar expects the same match twice.
+Replace one replaces the primary selection when it matches the query, as one undo step, then selects the next match from the new caret. Replace all reports `<n> replaced` and moves the caret to the end of the buffer. In regex mode, `$1` and the other `Regexp.Expand` tokens expand. `TestFindReplace` and `TestFindNextAndPrevious` call `View.FindNext` directly.
 
-**Agent.** Call `openFind(false)` or `openFind(true)`, set `findQuery`, and call `applyFind(1)` twice. Compare `SelectionBounds` after each call. They match.
+**Agent.** Call `openFind(false)`, set `findQuery`, and call `applyFind(1, false)` to move off the current hit. Call `applyFind(1, true)` to search again from `findOrigin`. Compare `SelectionBounds`.
 
 ### In the project
 
@@ -276,7 +276,7 @@ The bottom body becomes `<n> matches  <path>:<line>  <text>` for the first hit o
 
 **See.** The same popup title. The row reads `Pattern, then Tab is not required: type pattern<tab>replacement, then Enter.`
 
-**Pass.** The replacement split is a raw tab byte in the field (`strings.IndexByte(pattern, '\t')`). The Tab key is handled as a motion key and does not insert that byte, so a person typing in the popup searches the pattern and writes an empty replacement. A test sets `s.field` to `"old\tnew"` and calls `runProjectSearch(true)`. The write is `strings.ReplaceAll` on each regular file inside the workspace, skipping a `vendor/` prefix, a symlink, a path that resolves outside the workspace, files over 8 MiB, and a NUL in the first 8 KiB. Open buffers are left as they were, including dirty ones. The notice is `<n> replacements written`.
+**Pass.** The replacement split is a raw tab byte in the field (`strings.IndexByte(pattern, '\t')`). The Tab key is handled as a motion key and does not insert that byte, so a person typing in the popup searches the pattern and writes an empty replacement. A test sets `s.field` to `"old\tnew"` and calls `runProjectSearch(true)`. The replacement uses the same pattern, case, regex, and exclude rules as the search. `buffer.WriteAtomic` writes a closed regular file. The write skips a symlink, a path that resolves outside the workspace, a file over 8 MiB, and a NUL in the first 8 KiB. The UI drain changes an open buffer and then saves it. The notice is `<n> replacements written`.
 
 **Agent.** `TestBuiltinSearch` and `TestSearchMatchesRg` in `internal/search/search_test.go` cover the engines. The panel assertion reads `s.searchHits` and the formatted first line.
 
@@ -381,7 +381,7 @@ Branches popup title `Branches`. The current name ends with `  *`. An empty list
 
 A click replaces the focused editor with a side-by-side diff of HEAD against the current file. The left column is titled `HEAD` and the right column is titled `Working tree`. The two columns scroll together. Other splits keep their buffers. With no file open, the diff replaces the welcome page. The current file is the open buffer when that path is open, and the worktree file otherwise. An untracked file is all additions on the right. A deleted file is all removals on the left. A changed line is shown on both sides, and the words that differ are marked darker than the rest of the line. A file that is both staged and unstaged shows the net result against HEAD. The pinned title is the path. **Close** at the top right, and Escape, clear the diff and return to the buffer. Opening a file from the project tree clears it too. Arrow keys, page, home, and end scroll the diff. Typing does not change the buffer while the diff is showing. A binary file reads `Binary files differ`. A file over 1 MiB reads `File is too large to diff`. An empty diff reads `No changes`. Added lines are green and removed lines are red, the same colors as the gutter bars.
 
-`internal/git` can unstage. No command calls it. There is no push, pull, or discard in the window.
+There is no push, pull, or discard in the window. The buffer stores an open CRLF file as LF. The diff drops CRLF on the HEAD side before the compare.
 
 **Agent.** Use a temp repo. After an edit, drain until `gitFiles` contains the path. `doCommit` with a non-empty `field` clears the status. `Switch` with `Create: true` changes `s.branch` after the next status refresh. Assert the hook prompt by setting a hook executable and reading `s.gitNotice`, and assert that the hook script did not run. A click on a row sets `s.gitDiffPath`. Drain until `s.gitDiffRows` is non-empty for a text change, or `s.gitDiffNote` is set (`Binary files differ`, `File is too large to diff`, `No changes`, or an error). Close and Escape clear `s.gitDiffPath`.
 
@@ -417,7 +417,7 @@ Ctrl+T (`terminal.new`) starts another session from the editor or from a focused
 
 **See.** Title `Settings`. Plain keys, including Enter, do nothing. Ctrl, Alt, and Super chords still run. The card does not toggle closed when the command runs again.
 
-**Pass.** The click updates the value, repaints in the same frame, and writes the changed key to the user file. The project file is reloaded and still wins.
+**Pass.** The click updates the value, repaints in the same frame, and writes the changed key to the user file. The project file is reloaded and still wins, except `editor.goimports_on_save` and `editor.gofix_on_save`.
 
 | Row | Control | Range | Default | Key |
 |---|---|---|---|---|
@@ -484,7 +484,7 @@ One row per id in `commands.Catalog`. Stroke text is the default binding. `unbou
 | `file.newScratchBuffer` | New Scratch Buffer | unbound | Creates an empty text scratch and opens it. |
 | `file.newScratchFromSelection` | New Scratch File from Selection | unbound | Writes the primary selection into a new scratch, with no wrapper. Extension `.go` when the active path ends in `.go`, otherwise `.txt`. No view or an empty selection notifies `Select text to make a scratch file`. |
 | `file.renameScratch` | Rename Scratch | unbound | Asks for a new base name. Enter renames the file and keeps the buffer, including unsaved edits. The same name is a no-op. Escape cancels. A project file notifies `The current file is not a scratch`. |
-| `file.moveScratch` | Move Scratch to Project | unbound | Asks for a relative path in the open folder. Enter moves the file there. A `.go` file then gets code intelligence. A path outside the folder is refused. No folder notifies `Open a folder before moving a scratch`. A project file notifies `The current file is not a scratch`. |
+| `file.moveScratch` | Move Scratch to Project | unbound | Asks for a relative path in the open folder. Enter moves the file there. A `.go` file then gets code intelligence. A path outside the folder is refused. The move refuses a directory symlink on the destination path. No folder notifies `Open a folder before moving a scratch`. A project file notifies `The current file is not a scratch`. |
 
 ### Navigation
 
@@ -542,7 +542,7 @@ One row per id in `commands.Catalog`. Stroke text is the default binding. `unbou
 | ID | Title | Stroke | Result |
 |---|---|---|---|
 | `search.inFiles` | Search in Files | `ctrl+shift+f` | Project search. The bottom panel shows the first hit's summary line. |
-| `search.replaceInFiles` | Replace in Files | `ctrl+shift+r` | Literal replace on disk when the field contains a tab byte. |
+| `search.replaceInFiles` | Replace in Files | `ctrl+shift+r` | Case-insensitive replace when the field contains a tab byte. The command writes closed files on disk. The UI drain saves open buffers. |
 
 ### View
 
@@ -634,9 +634,9 @@ Keys the program reads:
 | `editor.tab_width` | int | `4` | Tab display and the Insert-spaces stop. Values ≤ 0 paint as 4. Card clamp 1–16. |
 | `editor.insert_spaces` | bool | `false` | Tab inserts spaces when true. |
 | `editor.show_whitespace` | bool | `false` | Draws `→` and `·`. |
-| `editor.gofix_on_save` | bool | `false` | Save of a `.go` file. Runs `go fix` on that file only. |
+| `editor.gofix_on_save` | bool | `false` | Save of a `.go` file. Runs `go fix` on that file only. The project file cannot set this key. |
 | `editor.gofumpt_on_save` | bool | `false` | Save of a `.go` file. `code.reformat` uses the same embedded gofumpt and does not read this bool. |
-| `editor.goimports_on_save` | bool | `false` | Save of a `.go` file. `code.organizeImports` uses the same embedded goimports and does not read this bool. |
+| `editor.goimports_on_save` | bool | `false` | Save of a `.go` file. `code.organizeImports` uses the same embedded goimports and does not read this bool. The project file cannot set this key. |
 | `editor.cursor_blink_ms` | int | `500` | Full blink period. 0 stays lit. |
 | `ui.theme` | string | `dark` | `dark`, `light`, or `themes/<name>.toml`. |
 | `intel.enabled` | bool | `true` | False or no folder: `intel off`, and the pre-start command notices stay. |
@@ -652,7 +652,7 @@ Keys the program reads:
 | `search.exclude` | string array | `["vendor/"]` | Project search exclude. |
 | `files.exclude` | string array | `["node_modules/"]` | Added to the workspace ignore list. |
 | `files.watch` | bool | `true` | False skips the file watcher. |
-| `terminal.shell` | string | `""` | Empty means `$SHELL`, then `/bin/sh`. |
+| `terminal.shell` | string | `""` | Empty means `$SHELL`, then `/bin/sh`. The project file cannot set this key. |
 | `terminal.scrollback_lines` | int | `10000` | PTY scrollback. Values ≤ 0 become 10000. |
 | `terminal.font_size` | float | `13` | Terminal face size. Values ≤ 0 paint as 13. Card clamp 8–32. |
 | `git.gutter` | bool | `true` | False skips gutter diffs. |
@@ -668,7 +668,7 @@ Keys that are stored and unread by the widgets:
 | `intel.semantic_tokens` | bool | `false` |
 | `search.max_results` | int | `20000` |
 
-A project value overrides the user value for the same key. Changing the card updates the user file only.
+A project value overrides the user value for the same key, except `terminal.shell`, `editor.goimports_on_save`, and `editor.gofix_on_save`. Those three keys stay at the user value. Changing the card updates the user file only.
 
 ## 13. Agent protocol
 

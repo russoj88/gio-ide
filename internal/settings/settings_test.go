@@ -187,6 +187,42 @@ gofix_on_save = "yes"
 	}
 }
 
+func ignoredProjectKey(problems []Problem, key string) bool {
+	for _, p := range problems {
+		if p.Key == key && p.Msg == "ignored in the project file" {
+			return true
+		}
+	}
+	return false
+}
+
+func TestProjectFileCannotStartAProcess(t *testing.T) {
+	dir := t.TempDir()
+	user := filepath.Join(dir, "user.toml")
+	project := filepath.Join(dir, "project.toml")
+	if err := os.WriteFile(user, []byte("[terminal]\nshell = \"/bin/sh\"\n\n[editor]\ngoimports_on_save = false\ngofix_on_save = false\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(project, []byte("[terminal]\nshell = \"/tmp/evil\"\n\n[editor]\ngoimports_on_save = true\ngofix_on_save = true\nfont_size = 18\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, problems := Load(user, project)
+	if got.Terminal.Shell != "/bin/sh" {
+		t.Fatalf("shell %q", got.Terminal.Shell)
+	}
+	if got.Editor.GoimportsOnSave || got.Editor.GofixOnSave {
+		t.Fatalf("project process flags applied: %+v", got.Editor)
+	}
+	if got.Editor.FontSize != 18 {
+		t.Fatalf("font %v", got.Editor.FontSize)
+	}
+	for _, key := range []string{"terminal.shell", "editor.goimports_on_save", "editor.gofix_on_save"} {
+		if !ignoredProjectKey(problems, key) {
+			t.Fatalf("missing ignore for %s: %#v", key, problems)
+		}
+	}
+}
+
 func badValue(problems []Problem) bool {
 	for _, p := range problems {
 		if len(p.Msg) >= 9 && p.Msg[:9] == "bad value" {
@@ -208,7 +244,7 @@ func TestApplyGofumptOnSaveWritesOnlyThatKey(t *testing.T) {
 	}
 	store := NewStore(user, project)
 	cur := store.Current()
-	if cur.Editor.FontSize != 18 || !cur.Editor.GoimportsOnSave || cur.Editor.GofumptOnSave || cur.Editor.GofixOnSave || cur.Intel.Enabled {
+	if cur.Editor.FontSize != 18 || cur.Editor.GoimportsOnSave || cur.Editor.GofumptOnSave || cur.Editor.GofixOnSave || cur.Intel.Enabled {
 		t.Fatalf("merged view %+v %+v", cur.Editor, cur.Intel)
 	}
 	if err := store.Apply(func(st *Settings) {
@@ -234,14 +270,14 @@ func TestApplyGofumptOnSaveWritesOnlyThatKey(t *testing.T) {
 		t.Fatalf("existing user key dropped:\n%s", text)
 	}
 	got, problems := Load(user, project)
-	if len(problems) != 0 {
+	if !ignoredProjectKey(problems, "editor.goimports_on_save") {
 		t.Fatalf("problems: %#v", problems)
 	}
 	if !got.Editor.GofumptOnSave {
 		t.Fatal("reloaded gofumpt on save not set")
 	}
-	if !got.Editor.GoimportsOnSave {
-		t.Fatal("project goimports override lost")
+	if got.Editor.GoimportsOnSave {
+		t.Fatal("project goimports was applied")
 	}
 	if got.Editor.FontSize != 18 {
 		t.Fatalf("project font size %v", got.Editor.FontSize)

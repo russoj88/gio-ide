@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/filemode"
@@ -203,4 +204,24 @@ func itoa(n int) string {
 		n /= 10
 	}
 	return string(b[i:])
+}
+
+func TestChangeKind(t *testing.T) {
+	cases := []struct {
+		op   fsnotify.Op
+		kind string
+	}{
+		{fsnotify.Create, "create"},
+		{fsnotify.Write, "write"},
+		{fsnotify.Remove, "remove"},
+		{fsnotify.Rename, "rename"},
+		{fsnotify.Chmod, ""},
+		{fsnotify.Create | fsnotify.Write, "create"},
+		{fsnotify.Remove | fsnotify.Write, "remove"},
+	}
+	for _, tc := range cases {
+		if got := changeKind(tc.op); got != tc.kind {
+			t.Fatalf("%v: got %q", tc.op, got)
+		}
+	}
 }

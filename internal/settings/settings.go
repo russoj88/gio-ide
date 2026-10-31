@@ -138,6 +138,8 @@ func Defaults() Settings {
 
 // Load merges defaults, then the user file, then the project file.
 // A missing file is skipped. Unknown keys warn. Bad values fall back.
+// The project file cannot set terminal.shell, editor.goimports_on_save,
+// or editor.gofix_on_save. Those keys stay at the user value.
 func Load(userPath, projectPath string) (Settings, []Problem) {
 	s := Defaults()
 	var problems []Problem
@@ -165,10 +167,21 @@ func applyFile(s *Settings, path, layer string, problems *[]Problem) {
 		*problems = append(*problems, Problem{Key: layer, Msg: "toml: " + err.Error()})
 		return
 	}
-	applyStruct(reflect.ValueOf(s), raw, "", problems)
+	applyStruct(reflect.ValueOf(s), raw, "", problems, layer == "project")
 }
 
-func applyStruct(dst reflect.Value, table map[string]any, path string, problems *[]Problem) {
+// projectIgnores reports keys that must not come from a project file.
+// Those keys start a process.
+func projectIgnores(key string) bool {
+	switch key {
+	case "terminal.shell", "editor.goimports_on_save", "editor.gofix_on_save":
+		return true
+	default:
+		return false
+	}
+}
+
+func applyStruct(dst reflect.Value, table map[string]any, path string, problems *[]Problem, project bool) {
 	for dst.Kind() == reflect.Pointer {
 		dst = dst.Elem()
 	}
@@ -196,13 +209,17 @@ func applyStruct(dst reflect.Value, table map[string]any, path string, problems 
 		if !field.CanSet() {
 			continue
 		}
-		if err := assign(field, v, full, problems); err != nil {
+		if project && projectIgnores(full) {
+			*problems = append(*problems, Problem{Key: full, Msg: "ignored in the project file"})
+			continue
+		}
+		if err := assign(field, v, full, problems, project); err != nil {
 			*problems = append(*problems, Problem{Key: full, Msg: "bad value, using default: " + err.Error()})
 		}
 	}
 }
 
-func assign(field reflect.Value, v any, path string, problems *[]Problem) error {
+func assign(field reflect.Value, v any, path string, problems *[]Problem, project bool) error {
 	if v == nil {
 		return fmt.Errorf("null")
 	}
@@ -212,7 +229,7 @@ func assign(field reflect.Value, v any, path string, problems *[]Problem) error 
 		if !ok {
 			return fmt.Errorf("want table, got %T", v)
 		}
-		applyStruct(field, m, path, problems)
+		applyStruct(field, m, path, problems, project)
 		return nil
 	case reflect.Map:
 		m, ok := asMap(v)
@@ -453,13 +470,6 @@ func (s *Store) Reload() Settings {
 		cb(next)
 	}
 	return out
-}
-
-// SetTheme updates the in-memory theme name. A later reload from disk replaces it.
-func (s *Store) SetTheme(name string) {
-	s.mu.Lock()
-	s.cur.UI.Theme = name
-	s.mu.Unlock()
 }
 
 // OnChange registers a callback invoked on the watcher goroutine after a reload.

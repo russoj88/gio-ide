@@ -416,12 +416,5 @@ func resizeGrid(old []Cell, oc, or, nc, nr int) []Cell {
 	return next
 }
 
-// DebugUnknown is the count of ignored sequences.
-func (t *Term) DebugUnknown() int {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.scr.unknown
-}
-
 // String is used in error wrapping.
 func (t *Term) String() string { return fmt.Sprintf("terminal %d", t.id) }

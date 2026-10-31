@@ -9,7 +9,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/russoj88/gio-ide/internal/buffer"
 	"github.com/russoj88/gio-ide/internal/bus"
+	"github.com/russoj88/gio-ide/internal/editor"
 	"github.com/russoj88/gio-ide/internal/search"
 	"github.com/russoj88/gio-ide/internal/ui"
 	"github.com/russoj88/gio-ide/internal/workspace"
@@ -34,14 +36,21 @@ func (s *shell) loadWorkspace() {
 	if !s.store.Current().Files.Watch {
 		return
 	}
-	_ = workspace.Watch(s.root, s.stop, func() {
+	_ = workspace.Watch(s.root, s.stop, func(changes []workspace.Change) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := ix.Refresh(ctx); err != nil {
 			return
 		}
 		s.bus.Post(bus.FileListUpdated{Root: s.root, Count: len(ix.Files())})
-		s.bus.Post(bus.FileSystemChanged{})
+		ev := make([]bus.FileChange, 0, len(changes))
+		for _, c := range changes {
+			if c.Path == "" || c.Kind == "" {
+				continue
+			}
+			ev = append(ev, bus.FileChange{Path: c.Path, Kind: c.Kind})
+		}
+		s.bus.Post(bus.FileSystemChanged{Changes: ev})
 	}, func() {
 		s.watchLimited = true
 		s.bus.Post(bus.Notification{Level: "warn", Text: "File watching stopped (fs.inotify.max_user_watches). The tree rescans when the window is focused."})
@@ -230,7 +239,7 @@ func (s *shell) runProjectSearch(replace bool) {
 	cur := s.store.Current()
 	q := search.Query{
 		Pattern: pattern,
-		Exclude: cur.Search.Exclude,
+		Exclude: append([]string(nil), cur.Search.Exclude...),
 	}
 	var eng search.Engine = search.Builtin{}
 	if cur.Search.Engine == "rg" {
@@ -253,13 +262,13 @@ func (s *shell) runProjectSearch(replace bool) {
 		}
 		s.bus.Post(bus.SearchDone{Err: msg})
 		if replace && err == nil {
-			s.replaceInFiles(root, files, pattern, repl)
+			s.replaceInFiles(root, files, q, repl)
 		}
 	}()
 }
 
-func (s *shell) replaceInFiles(root string, files []string, pattern, repl string) {
-	if pattern == "" {
+func (s *shell) replaceInFiles(root string, files []string, q search.Query, repl string) {
+	if q.Pattern == "" {
 		return
 	}
 	root = filepath.Clean(root)
@@ -269,8 +278,9 @@ func (s *shell) replaceInFiles(root string, files []string, pattern, repl string
 		return
 	}
 	n := 0
+	var open []string
 	for _, rel := range files {
-		if strings.HasPrefix(rel, "vendor/") {
+		if search.Skipped(rel, q) {
 			continue
 		}
 		path := filepath.Join(root, filepath.FromSlash(rel))
@@ -286,6 +296,10 @@ func (s *shell) replaceInFiles(root string, files []string, pattern, repl string
 		if err != nil || relToRoot == ".." || strings.HasPrefix(relToRoot, ".."+string(filepath.Separator)) {
 			continue
 		}
+		if s.docByPath(path) != nil {
+			open = append(open, path)
+			continue
+		}
 		rf, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 		if err != nil {
 			continue
@@ -297,26 +311,89 @@ func (s *shell) replaceInFiles(root string, files []string, pattern, repl string
 		if err != nil || len(b) > 8<<20 || strings.Contains(string(b[:min(len(b), 8192)]), "\x00") {
 			continue
 		}
-		text := string(b)
-		count := strings.Count(text, pattern)
-		if count == 0 {
-			continue
-		}
-		next := strings.ReplaceAll(text, pattern, repl)
-		wf, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC|syscall.O_NOFOLLOW, 0)
+		next, count, err := search.Replace(string(b), q, repl)
 		if err != nil {
 			s.bus.Post(bus.Notification{Level: "error", Text: err.Error()})
 			return
 		}
-		_, err = wf.Write([]byte(next))
-		if cerr := wf.Close(); err == nil {
-			err = cerr
+		if count == 0 || next == string(b) {
+			continue
 		}
-		if err != nil {
+		if err := buffer.WriteAtomic(path, []byte(next)); err != nil {
 			s.bus.Post(bus.Notification{Level: "error", Text: err.Error()})
 			return
 		}
 		n += count
 	}
+	if len(open) > 0 {
+		s.bus.Post(bus.ProjectReplace{
+			Paths: open, Pattern: q.Pattern, Repl: repl,
+			Regex: q.Regex, CaseSensitive: q.CaseSensitive, WholeWord: q.WholeWord,
+			DiskCount: n,
+		})
+		return
+	}
 	s.bus.Post(bus.Notification{Level: "info", Text: itoaSmall(n) + " replacements written"})
+}
+
+// docByPath returns an open document for path, or nil.
+// The lookup uses the document map only. The UI goroutine owns the panes.
+func (s *shell) docByPath(path string) *buffer.Doc {
+	if path == "" {
+		return nil
+	}
+	want := filepath.Clean(path)
+	s.docsMu.Lock()
+	defer s.docsMu.Unlock()
+	for _, doc := range s.docs {
+		if doc != nil && filepath.Clean(doc.Path()) == want {
+			return doc
+		}
+	}
+	return nil
+}
+
+// applyProjectReplace writes the same replacement into each open document.
+// The caller goroutine is the UI drain, so the piece table is not edited from a worker.
+func (s *shell) applyProjectReplace(ev bus.ProjectReplace) {
+	q := search.Query{
+		Pattern: ev.Pattern, Regex: ev.Regex,
+		CaseSensitive: ev.CaseSensitive, WholeWord: ev.WholeWord,
+	}
+	n := ev.DiskCount
+	for _, path := range ev.Paths {
+		doc := s.docByPath(path)
+		if doc == nil || doc.ReadOnly() {
+			continue
+		}
+		text := string(doc.Snapshot().Bytes())
+		if len(text) > 8<<20 {
+			continue
+		}
+		next, count, err := search.Replace(text, q, ev.Repl)
+		if err != nil {
+			s.notify(err.Error())
+			return
+		}
+		if count == 0 || next == text {
+			continue
+		}
+		if _, err := doc.Apply([]buffer.Edit{{
+			Start: 0,
+			End:   buffer.Offset(len(text)),
+			Text:  next,
+		}}, buffer.OriginCommand); err != nil {
+			s.notify(err.Error())
+			return
+		}
+		s.eachDocView(doc.ID(), func(v *editor.View) {
+			v.SetSelections(v.Selections())
+		})
+		if err := doc.Save(context.Background()); err != nil {
+			s.notify(err.Error())
+			return
+		}
+		n += count
+	}
+	s.notify(itoaSmall(n) + " replacements written")
 }

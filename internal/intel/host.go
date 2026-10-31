@@ -144,7 +144,6 @@ type host struct {
 	detail   string
 	root     string
 	docs     map[uint64]*openDoc
-	watches  []string
 	filePend []bus.FileChange
 	fileWait bool
 

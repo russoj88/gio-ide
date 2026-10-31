@@ -50,11 +50,15 @@ type Diff struct {
 // path is worktree-relative or absolute and goes through rel.
 // liveOK true uses live, including an empty slice.
 // liveOK false reads the worktree file. A missing file is an empty after side.
+// liveCRLF is true when live is a document that stores LF and saves CRLF.
+// HEAD then drops CRLF before the compare.
 // A repository with no commits, or a path that is not in HEAD, is an empty before side.
-func (r *Repo) DiffAgainstHead(ctx context.Context, path string, live []byte, liveOK bool) (Diff, error) {
+func (r *Repo) DiffAgainstHead(ctx context.Context, path string, live []byte, liveOK, liveCRLF bool) (Diff, error) {
 	if err := ctx.Err(); err != nil {
 		return Diff{}, err
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	rel, err := r.rel(path)
 	if err != nil {
 		return Diff{}, err
@@ -66,6 +70,9 @@ func (r *Repo) DiffAgainstHead(ctx context.Context, path string, live []byte, li
 	after, err := r.workFile(rel, live, liveOK)
 	if err != nil {
 		return Diff{}, err
+	}
+	if liveOK && liveCRLF {
+		before = bytes.ReplaceAll(before, []byte("\r\n"), []byte("\n"))
 	}
 	if len(before) > 1<<20 || len(after) > 1<<20 {
 		return Diff{TooBig: true}, nil

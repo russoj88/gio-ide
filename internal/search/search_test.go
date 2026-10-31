@@ -140,3 +140,24 @@ func TestRGWholeWord(t *testing.T) {
 		t.Fatalf("builtin %+v\nrg %+v", builtin, rip)
 	}
 }
+
+func TestReplace(t *testing.T) {
+	got, n, err := Replace("Old old", Query{Pattern: "old"}, "new")
+	if err != nil || n != 2 || got != "new new" {
+		t.Fatalf("fold %q n=%d err=%v", got, n, err)
+	}
+	got, n, err = Replace("cost $", Query{Pattern: "$", CaseSensitive: true}, "USD")
+	if err != nil || n != 1 || got != "cost USD" {
+		t.Fatalf("literal %q n=%d err=%v", got, n, err)
+	}
+	got, n, err = Replace("ab", Query{Pattern: "a(b)", Regex: true, CaseSensitive: true}, "$1")
+	if err != nil || n != 1 || got != "b" {
+		t.Fatalf("regex %q n=%d err=%v", got, n, err)
+	}
+	if !Skipped("vendor/x.go", Query{Exclude: []string{"vendor/"}}) {
+		t.Fatal("vendor not skipped")
+	}
+	if Skipped("a.go", Query{Exclude: []string{"vendor/"}}) {
+		t.Fatal("a.go skipped")
+	}
+}

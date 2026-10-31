@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	gogit "github.com/go-git/go-git/v5"
@@ -95,6 +96,27 @@ func TestStatusAndGutter(t *testing.T) {
 	if !foundDel {
 		t.Fatalf("deleted marks %+v", del)
 	}
+}
+
+func TestRepoCallsDoNotOverlap(t *testing.T) {
+	dir := t.TempDir()
+	repo := seed(t, dir, "f.txt", "one\n")
+	ctx := context.Background()
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			if _, err := repo.Status(ctx); err != nil {
+				t.Error(err)
+			}
+			if _, err := repo.DiffAgainstHead(ctx, "f.txt", []byte("one\n"), true, false); err != nil {
+				t.Error(err)
+			}
+			if _, err := repo.IndexText(ctx, "f.txt"); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
 }
 
 func TestStageCommitBranch(t *testing.T) {
@@ -194,11 +216,11 @@ func TestRelRejectsParent(t *testing.T) {
 		t.Fatal(err)
 	}
 	repo := seed(t, dir, "f.txt", "one\n")
-	_, err := repo.DiffAgainstHead(context.Background(), "../secret.txt", nil, false)
+	_, err := repo.DiffAgainstHead(context.Background(), "../secret.txt", nil, false, false)
 	if err == nil {
 		t.Fatal("parent path was accepted")
 	}
-	inside, err := repo.DiffAgainstHead(context.Background(), "f.txt", nil, false)
+	inside, err := repo.DiffAgainstHead(context.Background(), "f.txt", nil, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -25,7 +25,7 @@ func (s *shell) openFind(replace bool) {
 			s.findCaret = utf8.RuneCountInString(s.findQuery)
 		}
 	}
-	s.applyFind(1)
+	s.applyFind(1, true)
 }
 
 func stringsContainNL(s string) bool {
@@ -42,16 +42,20 @@ func (s *shell) findMove(dir int) {
 		s.openFind(false)
 		return
 	}
-	s.applyFind(dir)
+	s.applyFind(dir, false)
 }
 
-func (s *shell) applyFind(dir int) {
+// applyFind selects a match. fromOrigin restarts at the caret from openFind.
+// Find next and find previous keep the current hit and move from there.
+func (s *shell) applyFind(dir int, fromOrigin bool) {
 	v := s.activeView()
 	if v == nil || s.findQuery == "" {
 		return
 	}
-	origin := buffer.Offset(s.findOrigin)
-	v.SetSelections([]editor.Sel{{Anchor: origin, Head: origin}})
+	if fromOrigin {
+		origin := buffer.Offset(s.findOrigin)
+		v.SetSelections([]editor.Sel{{Anchor: origin, Head: origin}})
+	}
 	if err := v.FindNext(s.findQuery, s.findRegex, dir); err != nil {
 		s.notify(err.Error())
 	}
@@ -68,7 +72,7 @@ func (s *shell) findInput(st keymap.Stroke) {
 			s.replaceOne()
 			return
 		}
-		s.applyFind(1)
+		s.applyFind(1, false)
 		return
 	}
 	if st.Key == "tab" && st.Mod == 0 && s.findReplace {
@@ -114,7 +118,7 @@ func (s *shell) findInput(st keymap.Stroke) {
 	s.findCaret = caret
 	if s.findField == 0 {
 		s.findQuery = string(runes)
-		s.applyFind(1)
+		s.applyFind(1, true)
 	} else {
 		s.findRepl = string(runes)
 	}
@@ -206,7 +210,7 @@ func (s *shell) layoutFindBar(gtx layout.Context) layout.Dimensions {
 								})
 								if hit {
 									s.findRegex = !s.findRegex
-									s.applyFind(1)
+									s.applyFind(1, true)
 								}
 								return dims
 							}),

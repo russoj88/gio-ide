@@ -202,18 +202,20 @@ func (s *shell) requestSyntax(t *edTab) {
 	ver := doc.Version()
 	first, last := t.view.SyntaxWindow()
 	if t.reqVer != ver || t.reqFirst != first || t.reqLast != last {
-		s.syn.RequestSpans(doc.ID(), ver, first, last)
-		t.reqVer = ver
-		t.reqFirst = first
-		t.reqLast = last
+		if s.syn.RequestSpans(doc.ID(), ver, first, last) {
+			t.reqVer = ver
+			t.reqFirst = first
+			t.reqLast = last
+		}
 	}
 	if lang != "go" {
 		return
 	}
 	at := int(t.view.CaretOffset())
 	if t.bracketAt != at {
-		s.syn.RequestBracket(doc.ID(), ver, buffer.Offset(at))
-		t.bracketAt = at
+		if s.syn.RequestBracket(doc.ID(), ver, buffer.Offset(at)) {
+			t.bracketAt = at
+		}
 	}
 }
 

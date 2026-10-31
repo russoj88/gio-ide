@@ -229,6 +229,23 @@ func TestScratchMoveDest(t *testing.T) {
 	if nested != filepath.Join(root, "internal", "draft.go") {
 		t.Fatalf("nested %s", nested)
 	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := scratchMoveDest(root, "link/x.go"); err == nil {
+		t.Fatal("followed a symlink out of the project")
+	}
+	inside := filepath.Join(root, "keep")
+	if err := os.Mkdir(inside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(inside, filepath.Join(root, "alias")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := scratchMoveDest(root, "alias/x.go"); err == nil {
+		t.Fatal("created a parent through a symlink")
+	}
 }
 
 func TestMoveScratchRejectsOutsideRoot(t *testing.T) {

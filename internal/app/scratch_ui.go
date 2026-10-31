@@ -175,7 +175,70 @@ func scratchMoveDest(root, raw string) (string, error) {
 	if err != nil || got == ".." || strings.HasPrefix(got, ".."+string(filepath.Separator)) {
 		return "", errors.New("The destination must stay inside the project")
 	}
+	if err := scratchDestInside(root, dest); err != nil {
+		return "", err
+	}
 	return dest, nil
+}
+
+// scratchDestInside refuses a destination that leaves the project through a symlink.
+// Missing parents are allowed. An existing symlink on the path is not.
+func scratchDestInside(root, dest string) error {
+	rootReal, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(root, dest)
+	if err != nil {
+		return errors.New("The destination must stay inside the project")
+	}
+	cur := root
+	parts := strings.Split(rel, string(filepath.Separator))
+	for _, part := range parts[:len(parts)-1] {
+		cur = filepath.Join(cur, part)
+		st, err := os.Lstat(cur)
+		if os.IsNotExist(err) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if st.Mode()&os.ModeSymlink != 0 {
+			return errors.New("The destination must stay inside the project")
+		}
+	}
+	existing := filepath.Dir(dest)
+	for {
+		st, err := os.Lstat(existing)
+		if err == nil {
+			if st.Mode()&os.ModeSymlink != 0 {
+				return errors.New("The destination must stay inside the project")
+			}
+			break
+		}
+		if !os.IsNotExist(err) {
+			return err
+		}
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			return errors.New("The destination must stay inside the project")
+		}
+		existing = parent
+	}
+	resolved, err := filepath.EvalSymlinks(existing)
+	if err != nil {
+		return err
+	}
+	suffix, err := filepath.Rel(existing, dest)
+	if err != nil {
+		return errors.New("The destination must stay inside the project")
+	}
+	final := filepath.Join(resolved, suffix)
+	got, err := filepath.Rel(rootReal, final)
+	if err != nil || got == ".." || strings.HasPrefix(got, ".."+string(filepath.Separator)) {
+		return errors.New("The destination must stay inside the project")
+	}
+	return nil
 }
 
 // blankScratch reports whether doc is a scratch whose text is empty or whitespace.

@@ -477,6 +477,8 @@ func (s *shell) drain() {
 				s.ih.FilesChanged(ev.Changes)
 			}
 			s.scheduleGitStatus()
+		case bus.ProjectReplace:
+			s.applyProjectReplace(ev)
 		case bus.DocumentChanged:
 			s.scheduleGutter(ev.DocID)
 			s.noteGitDiffDoc(ev.DocID)

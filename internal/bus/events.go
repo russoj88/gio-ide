@@ -175,6 +175,16 @@ type FileSystemChanged struct {
 	Changes []FileChange
 }
 
+// ProjectReplace asks the UI to replace matches in open documents and save them.
+// DiskCount is how many replacements were already written to closed files.
+type ProjectReplace struct {
+	Paths                []string
+	Pattern, Repl        string
+	Regex, CaseSensitive bool
+	WholeWord            bool
+	DiskCount            int
+}
+
 type SearchHit struct {
 	Path                 string
 	Line, Col            int
@@ -306,6 +316,7 @@ func (SymbolsReady) isEvent()       {}
 func (IntelStateChanged) isEvent()  {}
 func (FileListUpdated) isEvent()    {}
 func (FileSystemChanged) isEvent()  {}
+func (ProjectReplace) isEvent()     {}
 func (SearchResultsBatch) isEvent() {}
 func (SearchDone) isEvent()         {}
 func (GitStatusUpdated) isEvent()   {}

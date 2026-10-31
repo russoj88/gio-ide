@@ -83,3 +83,29 @@ func TestFindReplace(t *testing.T) {
 		t.Fatalf("re n=%d err=%v body=%q", n, err, doc.Snapshot().Bytes())
 	}
 }
+
+func TestFindNextAndPrevious(t *testing.T) {
+	doc := buffer.FromBytes("t.go", []byte("one two one"))
+	v := NewView(doc)
+	if err := v.FindNext("one", false, 1); err != nil {
+		t.Fatal(err)
+	}
+	start, end := v.SelectionBounds()
+	if start != 0 || end != 3 {
+		t.Fatalf("first %d %d", start, end)
+	}
+	if err := v.FindNext("one", false, 1); err != nil {
+		t.Fatal(err)
+	}
+	start, end = v.SelectionBounds()
+	if start != 8 || end != 11 {
+		t.Fatalf("next %d %d", start, end)
+	}
+	if err := v.FindNext("one", false, -1); err != nil {
+		t.Fatal(err)
+	}
+	start, end = v.SelectionBounds()
+	if start != 0 || end != 3 {
+		t.Fatalf("prev %d %d", start, end)
+	}
+}

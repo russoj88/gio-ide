@@ -106,35 +106,11 @@ func (c *client) WorkDoneProgressCreate(_ context.Context, p *protocol.WorkDoneP
 	return nil
 }
 
-func (c *client) RegisterCapability(_ context.Context, p *protocol.RegistrationParams) error {
-	if p == nil {
-		return nil
-	}
-	c.h.mu.Lock()
-	for _, r := range p.Registrations {
-		c.h.watches = append(c.h.watches, r.Method)
-	}
-	c.h.mu.Unlock()
+func (c *client) RegisterCapability(context.Context, *protocol.RegistrationParams) error {
 	return nil
 }
 
-func (c *client) UnregisterCapability(_ context.Context, p *protocol.UnregistrationParams) error {
-	if p == nil {
-		return nil
-	}
-	drop := map[string]bool{}
-	for _, u := range p.Unregisterations {
-		drop[u.Method] = true
-	}
-	c.h.mu.Lock()
-	var keep []string
-	for _, m := range c.h.watches {
-		if !drop[m] {
-			keep = append(keep, m)
-		}
-	}
-	c.h.watches = keep
-	c.h.mu.Unlock()
+func (c *client) UnregisterCapability(context.Context, *protocol.UnregistrationParams) error {
 	return nil
 }
 
